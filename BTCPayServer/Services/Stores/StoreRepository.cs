@@ -827,8 +827,10 @@ retry:
                 data.StoreWebsite = r.StoreWebsite;
             if (!string.IsNullOrWhiteSpace(r.DefaultPaymentMethodId) && PaymentMethodId.TryParse(r.DefaultPaymentMethodId, out var paymentMethodId))
                 data.SetDefaultPaymentId(paymentMethodId);
-            if (r?.Blob is not null)
+            if (r?.Blob is not null) {
+			    r.Blob.EmailSettings = null;
                 data.SetStoreBlob(r.Blob);
+            }
             return data;
         }
         public async Task SetDefaultStoreTemplate(string storeId, string userId)

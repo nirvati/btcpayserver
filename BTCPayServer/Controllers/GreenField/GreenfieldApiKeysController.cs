@@ -38,7 +38,7 @@ namespace BTCPayServer.Controllers.Greenfield
         => CreateUserAPIKey(User.GetId(), request);
 
         [HttpPost("~/api/v1/users/{idOrEmail}/api-keys")]
-        [Authorize(Policy = Policies.CanManageUsers, AuthenticationSchemes = AuthenticationSchemes.Greenfield)]
+        [Authorize(Policy = Policies.CanModifyServerSettings, AuthenticationSchemes = AuthenticationSchemes.Greenfield)]
         public async Task<IActionResult> CreateUserAPIKey(string idOrEmail, CreateApiKeyRequest request)
         {
             request ??= new CreateApiKeyRequest();

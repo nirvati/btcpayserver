@@ -643,7 +643,7 @@ public partial class UIOfferingController(
         plan.OptimisticActivation = vm.OptimisticActivation;
         plan.Renewable = vm.Renewable;
         plan.RecurringType = vm.RecurringType;
-        plan.OfferingId = vm.OfferingId;
+        plan.OfferingId = offering.Id;
         plan.PlanChanges ??= new();
 
         foreach (var vmPC in vm.PlanChanges)

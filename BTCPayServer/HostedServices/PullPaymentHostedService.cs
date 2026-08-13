@@ -26,6 +26,7 @@ using NBXplorer;
 using Newtonsoft.Json.Linq;
 using PayoutData = BTCPayServer.Data.PayoutData;
 using PullPaymentData = BTCPayServer.Data.PullPaymentData;
+using BTCPayServer.Data.Payouts.LightningLike;
 
 
 namespace BTCPayServer.HostedServices
@@ -560,8 +561,8 @@ namespace BTCPayServer.HostedServices
                     return;
                 }
 
-                payout.Amount = Extensions.RoundUp(cryptoAmount,
-                    network.Divisibility);
+			    payout.Amount = Extensions.RoundUp(cryptoAmount,
+                    (payoutHandler is LightningLikePayoutHandler) ? (network.Divisibility + 3) : network.Divisibility);
                 await ctx.SaveChangesAsync();
 
                 _eventAggregator.Publish(new PayoutEvent(PayoutEvent.PayoutEventType.Approved, payout));

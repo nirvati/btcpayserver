@@ -33,7 +33,8 @@ public class UIStoresTokenController(
     StoreRepository storeRepository,
     IHtmlHelper html,
     PaymentMethodHandlerDictionary handlers,
-    PermissionService permissionService) : Controller
+    PermissionService permissionService,
+    IAuthorizationService authorizationService) : Controller
 {
     public IStringLocalizer StringLocalizer { get; } = stringLocalizer;
     public StoreData CurrentStore => HttpContext.GetStoreDataOrNull() ?? throw new InvalidOperationException("Store not found");
@@ -56,9 +57,17 @@ public class UIStoresTokenController(
             Id = t.Value
         }).ToArray();
 
-        model.ApiKey = (await tokenRepository.GetLegacyAPIKeys(CurrentStore.Id)).FirstOrDefault();
-        model.EncodedApiKey = model.ApiKey == null ? "*API Key*" : Encoders.Base64.EncodeData(Encoders.ASCII.DecodeData(model.ApiKey));
-        return View(model);
+		var userId = GetUserId();
+		if (userId != null && (await authorizationService.AuthorizeAsync(User, CurrentStore.Id, Policies.CanModifyStoreSettings)).Succeeded) {
+			TokensViewModel tokensViewModel = model;
+			tokensViewModel.ApiKey = (await tokenRepository.GetLegacyAPIKeys(CurrentStore.Id)).FirstOrDefault();
+			model.EncodedApiKey = ((model.ApiKey == null) ? "*API Key*" : Encoders.Base64.EncodeData(Encoders.ASCII.DecodeData(model.ApiKey)));
+		}
+		else
+		{
+			model.EncodedApiKey = "*API Key*";
+		}
+		return View(model);
     }
 
     [HttpGet("{storeId}/tokens/{tokenId}/revoke")]
@@ -125,6 +134,8 @@ public class UIStoresTokenController(
         };
         if (store == null)
             return Challenge(AuthenticationSchemes.Cookie);
+        if (!(await authorizationService.AuthorizeAsync(User, store.Id, Policies.CanModifyStoreSettings)).Succeeded)
+			return Challenge(AuthenticationSchemes.Cookie);
         var tokenRequest = new TokenRequest()
         {
             Label = model.Label,

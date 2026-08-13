@@ -35,6 +35,41 @@ namespace BTCPayServer.Plugins
         /// </summary>
         private static PreloadedPlugins _preloadedPlugins = new();
 
+        private static readonly Dictionary<string, Version> IncompatiblePlugins = new Dictionary<string, Version>(StringComparer.OrdinalIgnoreCase) {
+            {
+                "BTCPayServer.Plugins.ShopifyPlugin",
+                new Version(1, 1, 5)
+            },
+            {
+                "BTCPayServer.Plugins.Ecwid",
+                new Version(1, 1, 0)
+            },
+            {
+                "SamRockProtocol",
+                new Version(1, 1, 0)
+            },
+            {
+                "BTCPayServer.Plugins.Stripe",
+                new Version(1, 0, 12)
+            },
+            {
+                "BTCPayServer.Plugins.BigCommercePlugin",
+                new Version(1, 0, 7)
+            },
+            {
+                "BTCPayServer.RockstarDev.Plugins.MarkPaidCheckout",
+                new Version(0, 1, 2)
+            },
+            {
+                "BTCPayServer.Plugins.ArkPayServer",
+                new Version(2, 4, 2)
+            },
+            {
+                "BTCPayServer.Plugins.Cashu",
+                new Version(1, 0, 4)
+            }
+        };
+
         public static bool IsExceptionByPlugin(Exception exception, [MaybeNullWhen(false)] out PreloadedPlugin preloadedPlugin)
         {
             if (ExtractPluginFromStackTrace(exception, out preloadedPlugin)) return true;
@@ -220,15 +255,22 @@ namespace BTCPayServer.Plugins
             {
                 var pluginIdentifier = Path.GetFileName(directory);
                 var pluginFilePath = Path.Join(directory, pluginIdentifier + ".dll");
-                if (!File.Exists(pluginFilePath))
-                    continue;
-                if (disabledPluginIdentifiers.Contains(pluginIdentifier))
-                {
-                    logger.LogInformation($"Skipping disabled plugin {pluginIdentifier}");
-                    continue;
+                if (File.Exists(pluginFilePath))
+			    {
+                    if (disabledPluginIdentifiers.Contains(pluginIdentifier))
+                    {
+                        logger.LogInformation($"Skipping disabled plugin {pluginIdentifier}");
+                    }
+                    else if (IsIncompatible(pluginIdentifier, TryReadPluginVersion(directory, pluginIdentifier)))
+                    {
+					    logger.LogWarning($"Refusing to load the plugin {pluginIdentifier}, this version cannot be run. It has been disabled and will stay disabled until it is updated to a newer version.");
+                        ExecuteCommand((command: "disable", extension: pluginIdentifier), pluginsFolder);
+                    }
+                    else
+                    {
+                        pluginsToPreload.Add((pluginIdentifier, pluginFilePath));
+                    }
                 }
-
-                pluginsToPreload.Add((pluginIdentifier, pluginFilePath));
             }
 
             var toDisable = new List<string>();
@@ -585,6 +627,33 @@ namespace BTCPayServer.Plugins
             QueueCommands(pluginDir, ("disable", plugin));
         }
 
+
+        internal static Version? TryReadPluginVersion(string pluginDirectory, string pluginIdentifier)
+        {
+            string manifestFileName = Path.Join(pluginDirectory, pluginIdentifier + ".json");
+            if (!File.Exists(manifestFileName))
+                return null;
+            try {
+                return JObject.Parse(File.ReadAllText(manifestFileName)).ToObject<PluginService.AvailablePlugin>()?.Version;
+            }
+            catch {
+                return null;
+            }
+        }
+
+        internal static bool IsIncompatible(string? pluginIdentifier, Version? version)
+        {
+            if (pluginIdentifier == null || !IncompatiblePlugins.TryGetValue(pluginIdentifier, out var lastAffected))
+                return false;
+            if (version is null)
+                return true;
+            return TruncateToBuild(version) <= TruncateToBuild(lastAffected);
+        }
+
+        private static Version TruncateToBuild(Version version)
+        {
+            return new Version(version.Major, version.Minor, Math.Max(version.Build, 0));
+        }
 
         // Loads the list of disabled plugins from the file
         private static HashSet<string> GetDisabledPluginIdentifiers(string pluginsFolder)

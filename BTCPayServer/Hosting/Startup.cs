@@ -161,6 +161,7 @@ namespace BTCPayServer.Hosting
                  o.Filters.Add(new XXSSProtectionAttribute());
                  o.Filters.Add(new ReferrerPolicyAttribute("same-origin"));
                  o.ModelBinderProviders.Insert(0, new ModelBinders.DefaultModelBinderProvider());
+                 o.RouteValuesTakePrecedenceOverForm();
                  if (!Configuration.GetOrDefault<bool>("nocsp", false))
                      o.Filters.Add(new ContentSecurityPolicyAttribute(CSPTemplate.AntiXSS));
                  o.Filters.Add(new JsonHttpExceptionFilter());

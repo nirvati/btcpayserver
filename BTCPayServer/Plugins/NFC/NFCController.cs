@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using BTCPayServer.Abstractions.Extensions;
 using BTCPayServer.Client.Models;
+using BTCPayServer.Data;
 using BTCPayServer.Data.Payouts.LightningLike;
 using BTCPayServer.Lightning;
 using BTCPayServer.Payments;
@@ -12,6 +13,7 @@ using BTCPayServer.Services.Stores;
 using LNURL;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using NBitcoin;
 using Newtonsoft.Json.Linq;
 
@@ -24,16 +26,19 @@ namespace BTCPayServer.Plugins.NFC
         private readonly InvoiceRepository _invoiceRepository;
         private readonly InvoiceActivator _invoiceActivator;
         private readonly StoreRepository _storeRepository;
+	    private readonly ILogger<NFCController> _logger;
 
         public NFCController(IHttpClientFactory httpClientFactory,
             InvoiceRepository invoiceRepository,
             InvoiceActivator invoiceActivator,
-            StoreRepository storeRepository)
+            StoreRepository storeRepository,
+            ILogger<NFCController> logger)
         {
             _httpClientFactory = httpClientFactory;
             _invoiceRepository = invoiceRepository;
             _invoiceActivator = invoiceActivator;
             _storeRepository = storeRepository;
+		    _logger = logger;
         }
 
         public class SubmitRequest
@@ -45,10 +50,17 @@ namespace BTCPayServer.Plugins.NFC
 
         [AllowAnonymous]
         [IgnoreAntiforgeryToken]
+	    [HttpPost]
         public async Task<IActionResult> SubmitLNURLWithdrawForInvoice([FromBody] SubmitRequest request)
         {
             var invoice = await _invoiceRepository.GetInvoice(request.InvoiceId);
             if (invoice?.Status is not InvoiceStatus.New)
+            {
+                return NotFound();
+            }
+
+            bool? nfcEnabled = (await _storeRepository.FindStore(invoice.StoreId))?.GetStoreBlob().NfcEnabled;
+            if (!nfcEnabled ?? true)
             {
                 return NotFound();
             }
@@ -87,10 +99,16 @@ namespace BTCPayServer.Plugins.NFC
             {
                 info = await LNURL.LNURL.FetchInformation(uri, tag, httpClient) as LNURLWithdrawRequest;
             }
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "NFC: could not fetch LNURL-Withdraw info");
+                return BadRequest("Could not fetch info from LNURL-Withdraw");
+            }
             catch (Exception ex)
             {
-                var details = ex.InnerException?.Message ?? ex.Message;
-                return BadRequest($"Could not fetch info from LNURL-Withdraw: {details}");
+                _logger.LogWarning(ex, "NFC: LNURL-Withdraw info fetch failed");
+                string details = ex.InnerException?.Message ?? ex.Message;
+                return BadRequest("Could not fetch info from LNURL-Withdraw: " + details);
             }
 
             if (info?.Callback is null)
@@ -189,8 +207,14 @@ namespace BTCPayServer.Plugins.NFC
 
                 return BadRequest(result.Reason ?? "Unknown error");
             }
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "NFC: could not complete the LNURL-Withdraw request");
+                return BadRequest("Could not complete the LNURL-Withdraw request");
+            }
             catch (Exception ex)
             {
+                _logger.LogWarning(ex, "NFC: LNURL-Withdraw request failed");
                 return BadRequest(ex.Message);
             }
         }

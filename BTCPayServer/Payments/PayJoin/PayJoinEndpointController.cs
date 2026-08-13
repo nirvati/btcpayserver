@@ -259,6 +259,14 @@ namespace BTCPayServer.Payments.PayJoin
             WalletId? walletId = null;
             foreach (var output in psbt.Outputs)
             {
+                due = null;
+                originalPaymentOutput = null;
+                paymentAddress = null;
+                paymentAddressIndex = null;
+                invoice = null;
+                accountDerivation = null;
+                walletId = null;
+                ctx.Invoice = null;
                 var walletReceiveMatch =
                     _walletReceiveService.GetByScriptPubKey(network.CryptoCode, output.ScriptPubKey);
                 if (walletReceiveMatch is null)
@@ -371,6 +379,14 @@ namespace BTCPayServer.Payments.PayJoin
 
             if (due is null || due > Money.Zero)
                 return InvoiceNotFullyPaid();
+
+            var receiverStore = await _storeRepository.FindStore(walletId.StoreId);
+            var receiverSettings = receiverStore?.GetDerivationSchemeSettings(_handlers, walletId.CryptoCode);
+            if (receiverSettings?.IsHotWallet is not true ||
+                receiverSettings.AccountDerivation?.ToString() != accountDerivation.ToString())
+            {
+                return CreatePayjoinErrorAndLog(503, PayjoinReceiverWellknownErrors.Unavailable, "The receiving store's wallet is not a hot wallet");
+            }
 
             if (selectedUTXOs.Count == 0)
             {

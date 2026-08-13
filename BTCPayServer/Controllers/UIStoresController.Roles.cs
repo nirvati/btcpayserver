@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using BTCPayServer.Abstractions.Constants;
@@ -122,9 +123,11 @@ public partial class UIStoresController
         [FromServices] StoreRepository storeRepository,
         string role)
     {
-        var roleId = await storeRepository.ResolveStoreRoleId(storeId, role);
-        if (roleId == null)
-            return NotFound();
+		if (string.IsNullOrWhiteSpace(role) || role.Contains("::", StringComparison.Ordinal))
+		{
+			return NotFound();
+		}
+		StoreRoleId roleId = new StoreRoleId(storeId, role);
 
         var roleData = await storeRepository.GetStoreRole(roleId, true);
         if (roleData == null)
@@ -146,9 +149,11 @@ public partial class UIStoresController
         [FromServices] StoreRepository storeRepository,
         string role)
     {
-        var roleId = await storeRepository.ResolveStoreRoleId(storeId, role);
-        if (roleId == null)
-            return NotFound();
+		if (string.IsNullOrWhiteSpace(role) || role.Contains("::", StringComparison.Ordinal))
+		{
+			return NotFound();
+		}
+		StoreRoleId roleId = new StoreRoleId(storeId, role);
 
         var roleData = await storeRepository.GetStoreRole(roleId, true);
         if (roleData == null)

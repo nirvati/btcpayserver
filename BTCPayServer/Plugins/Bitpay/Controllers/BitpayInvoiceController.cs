@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using BTCPayServer.Abstractions.Constants;
@@ -13,17 +14,19 @@ using BTCPayServer.Filters;
 using BTCPayServer.Models;
 using BTCPayServer.Payments;
 using BTCPayServer.Plugins.Bitpay.Models;
+using BTCPayServer.Plugins.Bitpay.Security;
 using BTCPayServer.Services.Invoices;
 using BTCPayServer.Services.Rates;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NBitpayClient;
+using NicolasDorier.RateLimits;
 using StoreData = BTCPayServer.Data.StoreData;
 
 namespace BTCPayServer.Plugins.Bitpay.Controllers;
 
 [BitpayEndpointSelectorPolicy.BitpayEndpointMetadata]
-[Authorize(Policies.CanCreateInvoice, AuthenticationSchemes = AuthenticationSchemes.Bitpay)]
+[Authorize(Policies.CanCreateInvoice, AuthenticationSchemes = Abstractions.Constants.AuthenticationSchemes.Bitpay)]
 [BitpayFilter]
 public class BitpayInvoiceController : ControllerBase
 {
@@ -31,16 +34,19 @@ public class BitpayInvoiceController : ControllerBase
     private readonly Dictionary<PaymentMethodId, IPaymentMethodBitpayAPIExtension> _bitpayExtensions;
     private readonly CurrencyNameTable _currencyNameTable;
     private readonly InvoiceRepository _InvoiceRepository;
+	private readonly IRateLimitService _rateLimitService;
 
     public BitpayInvoiceController(UIInvoiceController invoiceController,
         Dictionary<PaymentMethodId, IPaymentMethodBitpayAPIExtension> bitpayExtensions,
         CurrencyNameTable currencyNameTable,
-        InvoiceRepository invoiceRepository)
+        InvoiceRepository invoiceRepository,
+        IRateLimitService rateLimitService)
     {
         _InvoiceController = invoiceController;
         _bitpayExtensions = bitpayExtensions;
         _currencyNameTable = currencyNameTable;
         _InvoiceRepository = invoiceRepository;
+		_rateLimitService = rateLimitService;
     }
 
     [HttpPost]
@@ -53,6 +59,10 @@ public class BitpayInvoiceController : ControllerBase
         var store = HttpContext.GetStoreDataOrNull();
         if (store == null)
             throw new BitpayHttpException(404, "Store not found");
+        if (User.Identity?.AuthenticationType == BitpayAuthenticationTypes.Anonymous &&
+            HttpContext.Connection.RemoteIpAddress is { } addr &&
+            !await _rateLimitService.Throttle(ZoneLimits.PublicInvoices, addr.ToString(), cancellationToken))
+            throw new BitpayHttpException(429, "Too many requests");
         return await CreateInvoiceCore(invoice, store, HttpContext.Request.GetAbsoluteRoot(), cancellationToken: cancellationToken);
     }
 

@@ -177,7 +177,7 @@ namespace BTCPayServer.Controllers
             var pp = await ctx.PullPayments.FindAsync(pullPaymentId);
             if (pp is null)
             {
-                ModelState.AddModelError(nameof(pullPaymentId), StringLocalizer["This pull payment does not exists"]);
+                return NotFound();
             }
 
             if (string.IsNullOrEmpty(vm.Destination))
